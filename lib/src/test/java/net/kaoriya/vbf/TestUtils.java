@@ -54,7 +54,7 @@ class TestUtils {
             }
         }
         double rate = (double)failure / (double)total * 100;
-        //System.out.println(String.format("too big error rate: %.2f%% failure=%d total=%d", rate, failure, total));
+        //System.out.println(String.format("errRate=%.2f%% failure=%d total=%d", rate, failure, total));
         assertFalse(rate > 1, String.format("too big error rate: %.2f%% failure=%d total=%d", rate, failure, total));
     }
 
@@ -77,7 +77,7 @@ class TestUtils {
             }
         }
         double rate = (double)failure / (double)total * 100;
-        System.out.println(String.format("too big error rate: %.2f%% failure=%d total=%d", rate, failure, total));
+        //System.out.println(String.format("errRate=%.2f%% failure=%d total=%d", rate, failure, total));
         assertFalse(rate > 1, String.format("too big error rate: %.2f%% failure=%d total=%d", rate, failure, total));
     }
 

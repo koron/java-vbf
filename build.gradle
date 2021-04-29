@@ -12,6 +12,8 @@ plugins {
     id 'maven-publish'
 }
 
+group = 'net.kaoriya'
+archivesBaseName = 'vbf'
 version = '0.0.1-SNAPSHOT'
 
 repositories {

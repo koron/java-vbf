@@ -35,7 +35,7 @@ class RedisVBF8Test {
         }
     }
 
-    @Test
+    //@Test
     void subtract() throws Exception {
         final String key = "net.kaoriya.vbf.radis8-SUB";
         try (Jedis jedis = getJedis()) {
@@ -49,7 +49,7 @@ class RedisVBF8Test {
         }
     }
 
-    @Test
+    //@Test
     void subtractOverflow() throws Exception {
         final String key = "net.kaoriya.vbf.radis8-SUBOVER";
         try (Jedis jedis = getJedis()) {

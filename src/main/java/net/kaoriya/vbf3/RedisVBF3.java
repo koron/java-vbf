@@ -1,14 +1,15 @@
 package net.kaoriya.vbf3;
 
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.Transaction;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+
 import javax.json.bind.Jsonb;
 import javax.json.bind.JsonbBuilder;
 import javax.json.bind.annotation.JsonbProperty;
-import java.util.Set;
-import java.util.ArrayList;
-import java.util.List;
-import java.nio.charset.StandardCharsets;
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.Transaction;
 import util.hash.MetroHash;
 
 public final class RedisVBF3 {
@@ -38,15 +39,17 @@ public final class RedisVBF3 {
         }
     }
 
-    static class Props {
-        long  m;
-        short k;
+    public static class Props {
+        public long  m;
+        public short k;
 
         @JsonbProperty(value = "max_life")
-        short maxLife;
+        public short maxLife;
 
         @JsonbProperty(value = "seed_base")
-        long  seedBase; // for future use
+        public long  seedBase; // for future use
+
+        public Props() {}
 
         Props(long m, short k, short maxLife) {
             this.m = m;
@@ -88,9 +91,11 @@ public final class RedisVBF3 {
         }
     }
 
-    static class Gen {
-        short bottom;
-        short top;
+    public static class Gen {
+        public short bottom;
+        public short top;
+
+        public Gen(){}
 
         Gen(short maxLife) {
             bottom = 1;
@@ -348,7 +353,7 @@ public final class RedisVBF3 {
     }
 
     public static void drop(Jedis jedis, String name) throws  VBF3Exception {
-        Set<String> keys = jedis.keys(name + "_");
+        Set<String> keys = jedis.keys(name + "_*");
         if (keys.size() == 0) {
             return;
         }

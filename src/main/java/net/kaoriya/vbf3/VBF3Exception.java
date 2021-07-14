@@ -43,4 +43,10 @@ public class VBF3Exception extends Exception {
             super("no generation information");
         }
     }
+
+    public final static class TooBigLife extends VBF3Exception {
+        TooBigLife(short max) {
+            super(String.format("life should be less than (<=) %d", max));
+        }
+    }
 }

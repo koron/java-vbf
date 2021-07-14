@@ -1,9 +1,15 @@
 package net.kaoriya.vbf3;
 
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.Transaction;
 import javax.json.bind.Jsonb;
 import javax.json.bind.JsonbBuilder;
 import javax.json.bind.annotation.JsonbProperty;
+import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
+import java.nio.charset.StandardCharsets;
+import util.hash.MetroHash;
 
 public final class RedisVBF3 {
 
@@ -20,6 +26,15 @@ public final class RedisVBF3 {
         }
         String gen() {
             return this.base + "_gen";
+        }
+    }
+
+    static class Pos {
+        int page;
+        long index;
+        Pos(long x) {
+            page = (int)(x / PAGE_SIZE);
+            index = (x % PAGE_SIZE) * 8;
         }
     }
 
@@ -59,6 +74,18 @@ public final class RedisVBF3 {
                 throw new VBF3Exception.ParameterMismatch(want, this);
             }
         }
+
+        Pos[] hash(byte[] d) {
+            Pos[] pp = new Pos[k];
+            for (int i = 0; i < k; i++) {
+                long x = MetroHash.hash64((long)i, d).get() % m;
+                if (x < 0) {
+                    x = -x;
+                }
+                pp[i] = new Pos(x);
+            }
+            return pp;
+        }
     }
 
     static class Gen {
@@ -82,6 +109,25 @@ public final class RedisVBF3 {
         void put(Jedis jedis, Key key) throws VBF3Exception {
             String s = JsonbBuilder.create().toJson(this);
             jedis.set(key.gen(), s);
+        }
+
+        boolean isValid(byte d) {
+            short n = (short)(d & 0xff);
+            return isValid(n);
+        }
+
+        boolean isValid(short n) {
+            boolean a = bottom <= n;
+            boolean b = top >= n;
+            if (bottom <= top) {
+                return a && b;
+            }
+            return a || b;
+        }
+
+        void advance(short d) {
+            bottom = m255p1add(bottom, d);
+            top = m255p1add(top, d);
         }
     }
 
@@ -118,29 +164,202 @@ public final class RedisVBF3 {
         this.pageNum = pageNum;
     }
 
+    List<List<Long>> get(Pos[] pp) {
+        int[] pages = new int[pageNum];
+        ArrayList<String> args = new ArrayList<>(pp.length * 3);
+        for (Pos p : pp) {
+            pages[p.page]++;
+            args.add("GET");
+            args.add("u8");
+            args.add(Long.toString(p.index));
+        }
+
+        ArrayList<List<Long>> rr = new ArrayList<>(pageNum);
+        int x = 0;
+        for (int i = 0; i < pages.length; i++) {
+            int n = pages[i];
+            if (n == 0) {
+                continue;
+            }
+            String[] subArgs = args.subList(x, x + n * 3).toArray(new String[0]);
+            x += n * 3;
+            List<Long> r = jedis.bitfield(key.data(i), subArgs);
+            rr.add(r);
+        }
+        return rr;
+    }
+
     public void put(byte[] d, short life) throws VBF3Exception {
-        // TODO:
+        if (life > props.maxLife) {
+            throw new VBF3Exception.TooBigLife(props.maxLife);
+        }
+        Gen gen = Gen.get(jedis, key);
+
+        Pos[] pp = props.hash(d);
+
+	// get current values by hashed `d` keys
+        List<List<Long>> rr = get(pp);
+
+	// detect updates
+
+        int updateIndex = 0;
+        int[] updatePages = new int[pageNum];
+        ArrayList<Pos> updates = new ArrayList<>(pp.length);
+        for (List<Long> r : rr) {
+            if (r == null || r.size() == 0) {
+                continue;
+            }
+            for (Long vlong : r) {
+                short v = vlong.shortValue();
+                short curr = 0;
+                if (gen.isValid(v)) {
+                    curr = (short)(v - gen.bottom + 1);
+                    if (v < gen.bottom) {
+                        curr--;
+                    }
+                }
+                if (curr == 0 || life > curr) {
+                    updatePages[pp[updateIndex].page]++;
+                    updates.add(pp[updateIndex]);
+                }
+                updateIndex++;
+            }
+        }
+        if (updates.size() == 0) {
+            return;
+        }
+
+	// apply updates
+
+        final String nv = Short.toString(m255p1add(gen.bottom, (short)(life - 1)));
+        int base = 0;
+        Transaction tx = jedis.multi();
+        for (int i = 0; i < updatePages.length; i++) {
+            int n = updatePages[i];
+            if (n == 0) {
+                continue;
+            }
+            ArrayList<String> args2 = new ArrayList<>(n * 4);
+            for (int j = 0; j < n; j++) {
+                args2.add("SET");
+                args2.add("u8");
+                args2.add(Long.toString(updates.get(base + j).index));
+                args2.add(nv);
+            }
+            base += n;
+            tx.bitfield(key.data(i), args2.toArray(new String[0]));
+        }
+        tx.exec();
     }
 
     public boolean check(byte[] d) throws VBF3Exception {
-        // TODO:
+        Gen gen = Gen.get(jedis, key);
+
+        Pos[] pp = props.hash(d);
+
+	// get current values by hashed `d` keys
+        List<List<Long>> rr = get(pp);
+
+	// detect invalids
+
+        int invalidIndex = 0;
+        int[] invalidPages = new int[pageNum];
+        ArrayList<Pos> invalids = new ArrayList<>(pp.length);
+        for (List<Long> r : rr) {
+            if (r == null || r.size() == 0) {
+                continue;
+            }
+            for (Long vlong : r) {
+                short v = vlong.shortValue();
+                if (!gen.isValid(v)) {
+                    invalidPages[pp[invalidIndex].page]++;
+                    invalids.add(pp[invalidIndex]);
+                }
+                invalidIndex++;
+            }
+        }
+        if (invalids.size() == 0) {
+            // no invalids means that all registers valid = data available.
+            return true;
+        }
+
+        // clear invalids
+
+        int base = 0;
+        Transaction tx = jedis.multi();
+        for (int i = 0; i < invalidPages.length; i++) {
+            int n = invalidPages[i];
+            if (n == 0) {
+                continue;
+            }
+            ArrayList<String> args2 = new ArrayList<>(n * 4);
+            for (int j = 0; j < n; j++) {
+                args2.add("SET");
+                args2.add("u8");
+                args2.add(Long.toString(invalids.get(base + j).index));
+                args2.add("0");
+            }
+            base += n;
+            tx.bitfield(key.data(i), args2.toArray(new String[0]));
+        }
+        tx.exec();
+
         return false;
     }
 
     public void advanceGeneration(short generations) throws VBF3Exception {
-        // TODO:
+        // FIXME: use watch/retry transaction.
+        Gen gen = Gen.get(jedis, key);
+        gen.advance(generations);
+        gen.put(jedis, key);
     }
 
     public void sweep() throws VBF3Exception {
-        // TODO:
+        // FIXME: use watch/retry transaction.
+        Gen gen = Gen.get(jedis, key);
+        for (int pn = 0; pn < pageNum; pn++) {
+            byte[] dataKey = key.data(pn).getBytes(StandardCharsets.UTF_8);
+            jedis.watch(dataKey);
+            byte[] b = jedis.get(dataKey);
+            if (b == null) {
+                jedis.unwatch();
+                continue;
+            }
+            boolean modified = false;
+            for (int i = 0; i < b.length; i++) {
+                if (b[i] != 0 && !gen.isValid(b[i])) {
+                    b[i] = 0;
+                    modified = true;
+                }
+            }
+            if (modified) {
+                jedis.unwatch();
+                continue;
+            }
+            Transaction tx = jedis.multi();
+            tx.set(dataKey, b);
+            tx.exec();
+        }
     }
 
     public void drop() throws VBF3Exception {
-        // TODO:
+        // FIXME: rewrite without RedisVBF3.drop()
         RedisVBF3.drop(jedis, key.base);
     }
 
     public static void drop(Jedis jedis, String name) throws  VBF3Exception {
-        // TODO:
+        Set<String> keys = jedis.keys(name + "_");
+        if (keys.size() == 0) {
+            return;
+        }
+        jedis.del(keys.toArray(new String[0]));
+    }
+
+    static short m255p1add(short a, short b) {
+        int v = a + b;
+        while (v > 255) {
+            v -= 255;
+        }
+        return (short)v;
     }
 }

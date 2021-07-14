@@ -9,6 +9,7 @@ import javax.json.bind.Jsonb;
 import javax.json.bind.JsonbBuilder;
 import javax.json.bind.annotation.JsonbProperty;
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.Response;
 import redis.clients.jedis.Transaction;
 import util.hash.MetroHash;
 
@@ -179,8 +180,9 @@ public final class RedisVBF3 {
             args.add(Long.toString(p.index));
         }
 
-        ArrayList<List<Long>> rr = new ArrayList<>(pageNum);
+        ArrayList<Response<List<Long>>> rr1 = new ArrayList<>(pageNum);
         int x = 0;
+        Transaction tx = jedis.multi();
         for (int i = 0; i < pages.length; i++) {
             int n = pages[i];
             if (n == 0) {
@@ -188,10 +190,15 @@ public final class RedisVBF3 {
             }
             String[] subArgs = args.subList(x, x + n * 3).toArray(new String[0]);
             x += n * 3;
-            List<Long> r = jedis.bitfield(key.data(i), subArgs);
-            rr.add(r);
+            rr1.add(tx.bitfield(key.data(i), subArgs));
         }
-        return rr;
+        tx.exec();
+
+        ArrayList<List<Long>> rr2 = new ArrayList<>(pageNum);
+        for (Response<List<Long>> r : rr1) {
+            rr2.add(r.get());
+        }
+        return rr2;
     }
 
     public void put(byte[] d, short life) throws VBF3Exception {
@@ -267,6 +274,7 @@ public final class RedisVBF3 {
 
 	// detect invalids
 
+        boolean validAll = true;
         int invalidIndex = 0;
         int[] invalidPages = new int[pageNum];
         ArrayList<Pos> invalids = new ArrayList<>(pp.length);
@@ -277,15 +285,21 @@ public final class RedisVBF3 {
             for (Long vlong : r) {
                 short v = vlong.shortValue();
                 if (!gen.isValid(v)) {
-                    invalidPages[pp[invalidIndex].page]++;
-                    invalids.add(pp[invalidIndex]);
+                    validAll = false;
+                    if (v != 0) {
+                        invalidPages[pp[invalidIndex].page]++;
+                        invalids.add(pp[invalidIndex]);
+                    }
                 }
                 invalidIndex++;
             }
         }
-        if (invalids.size() == 0) {
-            // no invalids means that all registers valid = data available.
+
+        if (validAll) {
             return true;
+        }
+        if (invalids.size() == 0) {
+            return false;
         }
 
         // clear invalids

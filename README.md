@@ -108,3 +108,28 @@ try (Jedis jedis = pool.getResource()) {
   vbf.delete();
 }
 ```
+
+## Test with redis on docker
+
+Redis on docker:
+
+```console
+# Start redis on docker
+$ docker run --rm --name vbf-redis -p 6379:6379 -d redis:6.2.3-alpine3.13
+
+# Connect by cli
+$ docker exec -it vbf-redis redis-cli
+
+# Stop redis on docker
+$ docker stop vbf-redis
+```
+
+Test
+
+```console
+# Run all tests
+$ ./gradlew test
+
+# Run partial tests (only vbf3)
+$ ./gradlew test --tests '*.vbf3.*'
+```

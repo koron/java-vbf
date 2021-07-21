@@ -35,7 +35,10 @@ dependencies {
     implementation 'com.google.guava:guava:30.0-jre'
 
     implementation 'com.adgear:metrohash:1.0.0'
-    implementation 'redis.clients:jedis:3.6.0'
+    implementation 'redis.clients:jedis:3.6.1'
+    implementation 'javax.json.bind:javax.json.bind-api:1.0'
+    implementation 'org.glassfish:javax.json:1.1.4'
+    implementation 'org.eclipse:yasson:1.0.9'
 }
 
 tasks.named('test') {

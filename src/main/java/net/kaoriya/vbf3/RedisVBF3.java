@@ -201,6 +201,31 @@ public final class RedisVBF3 {
         return rr2;
     }
 
+    void set(int[] pages, List<Pos> poss, String value) {
+        int base = 0;
+        Transaction tx = jedis.multi();
+        for (int i = 0; i < pages.length; i++) {
+            int n = pages[i];
+            if (n == 0) {
+                continue;
+            }
+            ArrayList<String> args = new ArrayList<>(n * 4);
+            for (int j = 0; j < n; j++) {
+                args.add("SET");
+                args.add("u8");
+                args.add(Long.toString(poss.get(base + j).index));
+                args.add(value);
+            }
+            base += n;
+            tx.bitfield(key.data(i), args.toArray(new String[0]));
+        }
+        tx.exec();
+    }
+
+    public void put(String s, short life) throws VBF3Exception {
+        put(s.getBytes(StandardCharsets.UTF_8), life);
+    }
+
     public void put(byte[] d, short life) throws VBF3Exception {
         if (life > props.maxLife) {
             throw new VBF3Exception.TooBigLife(props.maxLife);
@@ -237,31 +262,18 @@ public final class RedisVBF3 {
                 updateIndex++;
             }
         }
+
         if (updates.size() == 0) {
             return;
         }
 
 	// apply updates
+        set(updatePages, updates,
+                Short.toString(m255p1add(gen.bottom, (short)(life - 1))));
+    }
 
-        final String nv = Short.toString(m255p1add(gen.bottom, (short)(life - 1)));
-        int base = 0;
-        Transaction tx = jedis.multi();
-        for (int i = 0; i < updatePages.length; i++) {
-            int n = updatePages[i];
-            if (n == 0) {
-                continue;
-            }
-            ArrayList<String> args2 = new ArrayList<>(n * 4);
-            for (int j = 0; j < n; j++) {
-                args2.add("SET");
-                args2.add("u8");
-                args2.add(Long.toString(updates.get(base + j).index));
-                args2.add(nv);
-            }
-            base += n;
-            tx.bitfield(key.data(i), args2.toArray(new String[0]));
-        }
-        tx.exec();
+    public boolean check(String s) throws VBF3Exception {
+        return check(s.getBytes(StandardCharsets.UTF_8));
     }
 
     public boolean check(byte[] d) throws VBF3Exception {
@@ -303,25 +315,7 @@ public final class RedisVBF3 {
         }
 
         // clear invalids
-
-        int base = 0;
-        Transaction tx = jedis.multi();
-        for (int i = 0; i < invalidPages.length; i++) {
-            int n = invalidPages[i];
-            if (n == 0) {
-                continue;
-            }
-            ArrayList<String> args2 = new ArrayList<>(n * 4);
-            for (int j = 0; j < n; j++) {
-                args2.add("SET");
-                args2.add("u8");
-                args2.add(Long.toString(invalids.get(base + j).index));
-                args2.add("0");
-            }
-            base += n;
-            tx.bitfield(key.data(i), args2.toArray(new String[0]));
-        }
-        tx.exec();
+        set(invalidPages, invalids, "0");
 
         return false;
     }

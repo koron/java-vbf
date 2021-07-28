@@ -82,7 +82,84 @@ Please read [public document](https://docs.github.com/en/packages/guides/configu
 
 ## Getting Started
 
+### with VBF3 Redis
+
+Example code to using VBF3 with Redis backend.
+There more information about VBF3 in [this document][vbf3readme].
+
+[vbf3readme]:./docs/vbf3-readme.md
+
+```java
+import net.kaoriya.vbf3.RedisVBF3;
+
+// connect Redis with Jedis
+JedisPool pool = new JedisPool(new JedisPoolConfig(), "localhost");
+try (Jedis jedis = pool.getResource()) {
+
+  ///////////////////////////////////////////////////////////////////////////
+  // (1/6) Setting up a filter
+
+  // Parameters for VBF3
+  final long  m = (long)1000;       // size in bytes of this VBF
+  final short k = (short)7;         // number of hashes
+  final short maxLife = (short)52;  // max of life, for `put()`
+
+  // Open an existing VB-Filter, or create new one.
+  // This will be failed if existing one have wrong parameters.
+  RedisVBF3 f = new RedisVBF3.open(jedis, "redis-key-base-of-filter", m, k);
+
+  ///////////////////////////////////////////////////////////////////////////
+  // (2/6) Putting data
+
+  // put some values to a VBF (with max life time)
+  f.put("value001".getBytes(), (short)52);
+  f.put("value002".getBytes(), (short)52);
+  f.put("value003".getBytes(), (short)52);
+
+  // put a value with short life time.
+  f.put("value004".getBytes(), (short)10);
+
+  // put a string value. (`put(String, short)` is provoided.
+  f.put("value005", (short)52);
+
+  ///////////////////////////////////////////////////////////////////////////
+  // (3/6) Checking data existence
+
+  // Check with `byte[]`
+  f.check("value001".getBytes());  // this should return `true`
+
+  // Check with `String`
+  f.check("value002");             // this should return `true`
+
+  // Check a data which not put
+  f.check("no-exists");            // this should return `false`
+
+  ///////////////////////////////////////////////////////////////////////////
+  // (4/6) Advance generation (forget old data)
+
+  // Forward 10 generations. as a result, above `value004` (which have short
+  // life time) will be forgotten.
+  f.advanceGeneration(10);
+
+  // This should return `false` now
+  f.check("value004");
+
+  ///////////////////////////////////////////////////////////////////////////
+  // (5/6) Sweep expired data
+
+  f.sweep();
+
+  ///////////////////////////////////////////////////////////////////////////
+  // (6/6) Drop an unused filter. It removes corresponding values from Redis.
+
+  f.drop();
+}
+```
+
+### with VBF(1) Redis
+
 Example code to using VBF with Redis backend.
+"8" in "VBF8" means 8-bits for managing generation.
 
 ```java
 JedisPool pool = new JedisPool(new JedisPoolConfig(), "localhost");

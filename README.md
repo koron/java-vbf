@@ -43,7 +43,7 @@ java-hlltc is available on [GitHub Packages][gp].
     <dependency>
       <groupId>net.kaoriya</groupId>
       <artifactId>vbf</artifactId>
-      <version>0.0.2</version>
+      <version>0.1.0</version>
     </dependency>
     ```
 

@@ -139,7 +139,7 @@ try (Jedis jedis = pool.getResource()) {
 
   // Forward 10 generations. as a result, above `value004` (which have short
   // life time) will be forgotten.
-  f.advanceGeneration(10);
+  f.advanceGeneration((short)10);
 
   // This should return `false` now
   f.check("value004");

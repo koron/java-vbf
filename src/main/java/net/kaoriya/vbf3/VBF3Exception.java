@@ -49,4 +49,10 @@ public class VBF3Exception extends Exception {
             super(String.format("life should be less than (<=) %d", max));
         }
     }
+
+    public final static class TransactionFailure extends VBF3Exception {
+        TransactionFailure(int max) {
+            super(String.format("transaction faield %d times", max));
+        }
+    }
 }

@@ -11,6 +11,7 @@ import javax.json.bind.annotation.JsonbProperty;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.Response;
 import redis.clients.jedis.Transaction;
+import redis.clients.jedis.exceptions.JedisDataException;
 import util.hash.MetroHash;
 
 public final class RedisVBF3 {
@@ -115,6 +116,11 @@ public final class RedisVBF3 {
         void put(Jedis jedis, Key key) throws VBF3Exception {
             String s = JsonbBuilder.create().toJson(this);
             jedis.set(key.gen(), s);
+        }
+
+        void put(Transaction tx, Key key) throws VBF3Exception {
+            String s = JsonbBuilder.create().toJson(this);
+            tx.set(key.gen(), s);
         }
 
         boolean isValid(byte d) {
@@ -320,44 +326,67 @@ public final class RedisVBF3 {
         return false;
     }
 
+    static final int RETRY_MAX = 5;
+
     public void advanceGeneration(short generations) throws VBF3Exception {
-        // FIXME: use watch/retry transaction.
-        Gen gen = Gen.get(jedis, key);
-        gen.advance(generations);
-        gen.put(jedis, key);
+        for (int retries = RETRY_MAX; retries > 0; retries--) {
+            jedis.watch(key.gen());
+            Gen gen = Gen.get(jedis, key);
+            gen.advance(generations);
+            Transaction tx = jedis.multi();
+            gen.put(tx, key);
+            try {
+                tx.exec();
+                return;
+            } catch (JedisDataException e) {
+                // ignore confliction, retry
+            }
+        }
+        throw new VBF3Exception.TransactionFailure(RETRY_MAX);
     }
 
     public void sweep() throws VBF3Exception {
-        // FIXME: use watch/retry transaction.
         Gen gen = Gen.get(jedis, key);
+pagesLoop:
         for (int pn = 0; pn < pageNum; pn++) {
             byte[] dataKey = key.data(pn).getBytes(StandardCharsets.UTF_8);
-            jedis.watch(dataKey);
-            byte[] b = jedis.get(dataKey);
-            if (b == null) {
-                jedis.unwatch();
-                continue;
-            }
-            boolean modified = false;
-            for (int i = 0; i < b.length; i++) {
-                if (b[i] != 0 && !gen.isValid(b[i])) {
-                    b[i] = 0;
-                    modified = true;
+            for (int retries = RETRY_MAX; retries > 0; retries--) {
+                jedis.watch(dataKey);
+                byte[] b = jedis.get(dataKey);
+                if (b == null) {
+                    jedis.unwatch();
+                    continue pagesLoop;
+                }
+                boolean modified = false;
+                for (int i = 0; i < b.length; i++) {
+                    if (b[i] != 0 && !gen.isValid(b[i])) {
+                        b[i] = 0;
+                        modified = true;
+                    }
+                }
+                if (modified) {
+                    jedis.unwatch();
+                    continue pagesLoop;
+                }
+                Transaction tx = jedis.multi();
+                tx.set(dataKey, b);
+                try {
+                    tx.exec();
+                    continue pagesLoop;
+                } catch (JedisDataException e) {
+                    // ignore confliction, retry
                 }
             }
-            if (modified) {
-                jedis.unwatch();
-                continue;
-            }
-            Transaction tx = jedis.multi();
-            tx.set(dataKey, b);
-            tx.exec();
+            throw new VBF3Exception.TransactionFailure(RETRY_MAX);
         }
     }
 
     public void drop() throws VBF3Exception {
-        // FIXME: rewrite without RedisVBF3.drop()
-        RedisVBF3.drop(jedis, key.base);
+        for (int i = 0; i < pageNum; i++) {
+            jedis.del(key.data(i));
+        }
+        jedis.del(key.gen());
+        jedis.del(key.props());
     }
 
     public static void drop(Jedis jedis, String name) throws  VBF3Exception {

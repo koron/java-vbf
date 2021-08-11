@@ -331,15 +331,19 @@ public final class RedisVBF3 {
     public void advanceGeneration(short generations) throws VBF3Exception {
         for (int retries = RETRY_MAX; retries > 0; retries--) {
             jedis.watch(key.gen());
-            Gen gen = Gen.get(jedis, key);
-            gen.advance(generations);
-            Transaction tx = jedis.multi();
-            gen.put(tx, key);
             try {
-                tx.exec();
-                return;
-            } catch (JedisDataException e) {
-                // ignore confliction, retry
+                Gen gen = Gen.get(jedis, key);
+                gen.advance(generations);
+                Transaction tx = jedis.multi();
+                gen.put(tx, key);
+                try {
+                    tx.exec();
+                    return;
+                } catch (JedisDataException e) {
+                    // ignore confliction, retry
+                }
+            } finally {
+                jedis.unwatch();
             }
         }
         throw new VBF3Exception.TransactionFailure(RETRY_MAX);
@@ -352,29 +356,31 @@ pagesLoop:
             byte[] dataKey = key.data(pn).getBytes(StandardCharsets.UTF_8);
             for (int retries = RETRY_MAX; retries > 0; retries--) {
                 jedis.watch(dataKey);
-                byte[] b = jedis.get(dataKey);
-                if (b == null) {
-                    jedis.unwatch();
-                    continue pagesLoop;
-                }
-                boolean modified = false;
-                for (int i = 0; i < b.length; i++) {
-                    if (b[i] != 0 && !gen.isValid(b[i])) {
-                        b[i] = 0;
-                        modified = true;
-                    }
-                }
-                if (modified) {
-                    jedis.unwatch();
-                    continue pagesLoop;
-                }
-                Transaction tx = jedis.multi();
-                tx.set(dataKey, b);
                 try {
-                    tx.exec();
-                    continue pagesLoop;
-                } catch (JedisDataException e) {
-                    // ignore confliction, retry
+                    byte[] b = jedis.get(dataKey);
+                    if (b == null) {
+                        continue pagesLoop;
+                    }
+                    boolean modified = false;
+                    for (int i = 0; i < b.length; i++) {
+                        if (b[i] != 0 && !gen.isValid(b[i])) {
+                            b[i] = 0;
+                            modified = true;
+                        }
+                    }
+                    if (modified) {
+                        continue pagesLoop;
+                    }
+                    Transaction tx = jedis.multi();
+                    tx.set(dataKey, b);
+                    try {
+                        tx.exec();
+                        continue pagesLoop;
+                    } catch (JedisDataException e) {
+                        // ignore confliction, retry
+                    }
+                } finally {
+                    jedis.unwatch();
                 }
             }
             throw new VBF3Exception.TransactionFailure(RETRY_MAX);

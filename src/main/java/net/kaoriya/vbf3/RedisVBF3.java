@@ -9,6 +9,7 @@ import javax.json.bind.Jsonb;
 import javax.json.bind.JsonbBuilder;
 import javax.json.bind.annotation.JsonbProperty;
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.Pipeline;
 import redis.clients.jedis.Response;
 import redis.clients.jedis.Transaction;
 import redis.clients.jedis.exceptions.JedisDataException;
@@ -388,11 +389,13 @@ pagesLoop:
     }
 
     public void drop() throws VBF3Exception {
+        Pipeline p = jedis.pipelined();
         for (int i = 0; i < pageNum; i++) {
-            jedis.del(key.data(i));
+            p.del(key.data(i));
         }
-        jedis.del(key.gen());
-        jedis.del(key.props());
+        p.del(key.gen());
+        p.del(key.props());
+        p.sync();
     }
 
     public static void drop(Jedis jedis, String name) throws  VBF3Exception {

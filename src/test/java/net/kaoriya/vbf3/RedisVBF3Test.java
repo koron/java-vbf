@@ -79,10 +79,13 @@ class RedisVBF3Test {
 
     static void checkFPRate(RedisVBF3 vbf, int num, double hitRate) throws Exception {
         int mid = (int)((double)num * hitRate + 0.5);
+
+        byte[][] vals = new byte[mid - 0][];
         for (int i = 0; i < mid; i++) {
-            String s = String.valueOf(i);
-            vbf.put(int2bytes(i), (short)1);
+            vals[i] =  int2bytes(i);
         }
+        vbf.put((short)1, vals);
+        vals = null;
 
 	// check no false negative entries.
         //for (int i = 0; i < mid; i++) {

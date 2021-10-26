@@ -2,6 +2,7 @@ package net.kaoriya.vbf3;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -81,16 +82,23 @@ public final class RedisVBF3 {
             }
         }
 
-        Pos[] hash(byte[] d) {
-            Pos[] pp = new Pos[k];
-            for (int i = 0; i < k; i++) {
-                long x = MetroHash.hash64((long)i, d).get() % m;
-                if (x < 0) {
-                    x = -x;
+        Pos[] hash(byte[] ...dd) {
+            var pp = new ArrayList<Pos>(k * dd.length);
+            var seen = new HashSet<Long>(k * dd.length);
+            for (byte[] d : dd) {
+                for (int i = 0; i < k; i++) {
+                    long x = MetroHash.hash64((long)i, d).get() % m;
+                    if (x < 0) {
+                        x = -x;
+                    }
+                    if (seen.contains(x)) {
+                        continue;
+                    }
+                    seen.add(x);
+                    pp.add(new Pos(x));
                 }
-                pp[i] = new Pos(x);
             }
-            return pp;
+            return pp.toArray(new Pos[0]);
         }
     }
 
@@ -229,17 +237,43 @@ public final class RedisVBF3 {
         tx.exec();
     }
 
+    /** put puts a string to the filter.
+     *
+     * This is kept for only compatibility purpose.
+     * Please use `put(short, String ...)` instead.
+     */
     public void put(String s, short life) throws VBF3Exception {
-        put(s.getBytes(StandardCharsets.UTF_8), life);
+        put(life, s.getBytes(StandardCharsets.UTF_8));
     }
 
+    /** put puts a byte array to the filter.
+     *
+     * This is kept for only compatibility purpose.
+     * Please use `put(short, byte[] ...)` instead.
+     */
     public void put(byte[] d, short life) throws VBF3Exception {
+        put(life, d);
+    }
+
+    /** put puts multiple strings to the filter.
+     */
+    public void put(short life, String ...strs) throws VBF3Exception {
+        var byteArrayArray = new byte[strs.length][];
+        for (int i = 0; i < strs.length; i++) {
+            byteArrayArray[i] = strs[i].getBytes(StandardCharsets.UTF_8);
+        }
+        put(life, byteArrayArray);
+    }
+
+    /** put puts multiple byte arrays to the filter.
+     */
+    public void put(short life, byte[] ...dd) throws VBF3Exception {
         if (life > props.maxLife) {
             throw new VBF3Exception.TooBigLife(props.maxLife);
         }
         Gen gen = Gen.get(jedis, key);
 
-        Pos[] pp = props.hash(d);
+        Pos[] pp = props.hash(dd);
 
 	// get current values by hashed `d` keys
         List<List<Long>> rr = get(pp);

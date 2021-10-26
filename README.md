@@ -112,15 +112,14 @@ try (Jedis jedis = pool.getResource()) {
   // (2/6) Putting data
 
   // put some values to a VBF (with max life time)
-  f.put("value001".getBytes(), (short)52);
-  f.put("value002".getBytes(), (short)52);
-  f.put("value003".getBytes(), (short)52);
+  f.put((short)52, "value001");
+  f.put((short)52, "value002", "value003");
 
   // put a value with short life time.
-  f.put("value004".getBytes(), (short)10);
+  f.put((short)10, ,"value004".getBytes());
 
   // put a string value. (`put(String, short)` is provoided.
-  f.put("value005", (short)52);
+  f.put((short)52, "value005");
 
   ///////////////////////////////////////////////////////////////////////////
   // (3/6) Checking data existence

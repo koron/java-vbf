@@ -209,3 +209,16 @@ $ ./gradlew test
 # Run partial tests (only vbf3)
 $ ./gradlew test --tests '*.vbf3.*'
 ```
+
+## How to release
+
+1. update `version` in build.gradle
+2. `./gradlew test`
+3. `./gradlew publish`
+
+    Set these properties with correct values in ~/.gradle/gradle.properties
+
+    ```props
+    gpr.user=
+    gpr.key=
+    ```

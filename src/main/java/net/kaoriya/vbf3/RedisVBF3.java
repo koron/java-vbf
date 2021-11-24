@@ -2,6 +2,7 @@ package net.kaoriya.vbf3;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -40,6 +41,24 @@ public final class RedisVBF3 {
         Pos(long x) {
             page = (int)(x / PAGE_SIZE);
             index = (x % PAGE_SIZE) * 8;
+        }
+    }
+
+    static class PosComparator implements Comparator<Pos> {
+        @Override
+        public int compare(Pos a, Pos b) {
+            int d = a.page - b.page;
+            if (d != 0) {
+                return d;
+            }
+            long e = a.index - b.index;
+            if (e < 0) {
+                return -1;
+            } else if (e > 0) {
+                return 1;
+            } else {
+                return 0;
+            }
         }
     }
 
@@ -98,6 +117,7 @@ public final class RedisVBF3 {
                     pp.add(new Pos(x));
                 }
             }
+            pp.sort(new PosComparator());
             return pp.toArray(new Pos[0]);
         }
     }

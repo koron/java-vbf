@@ -88,10 +88,10 @@ class RedisVBF3Test {
         vals = null;
 
 	// check no false negative entries.
-        //for (int i = 0; i < mid; i++) {
-        //    boolean has = vbf.check(int2bytes(i));
-        //    assertTrue(has);
-        //}
+        for (int i = 0; i < mid; i++) {
+            boolean has = vbf.check(int2bytes(i));
+            assertTrue(has);
+        }
 
         // check false positive rate is less than 1%
         int falsePositive = 0;
@@ -175,6 +175,47 @@ class RedisVBF3Test {
             } finally {
                 rf.drop();
             }
+        }
+    }
+
+    @Test
+    void checkHolding() throws Exception {
+        try (Jedis jedis = getJedis()) {
+            checkHolding(jedis, 10_000L, 0.001);
+            checkHolding(jedis, 100_000L, 0.001);
+            checkHolding(jedis, 1000_000L, 0.001);
+            checkHolding(jedis, 10_000_000L, 0.001);
+            checkHolding(jedis, 20_000_000L, 0.001);
+            checkHolding(jedis, 30_000_000L, 0.001);
+            checkHolding(jedis, 40_000_000L, 0.001);
+            checkHolding(jedis, 50_000_000L, 0.001);
+            checkHolding(jedis, 60_000_000L, 0.001);
+            checkHolding(jedis, 70_000_000L, 0.001);
+            checkHolding(jedis, 80_000_000L, 0.001);
+            checkHolding(jedis, 100_000_000L, 0.001);
+        }
+    }
+
+    static void checkHolding(Jedis jedis, long n, double p) throws Exception {
+        String key = String.format("checkHolding_n%d_p%g", n, p);
+        double m = Math.ceil((double)n * Math.log(p) / Math.log(1 / Math.pow(2, Math.log(2))));
+        double k = Math.round((m / (double)n) * Math.log(2));
+        //System.out.println(String.format("n=%d p=%g m=%g k=%g key=%s", n, p, m, k, key));
+        RedisVBF3 vbf = RedisVBF3.open(jedis, key, (long)m, (short)k, (short)10);
+        try {
+            final int Q = 100;
+            byte[][] vals = new byte[Q][];
+            for (int i = 0; i < Q; i++) {
+                vals[i] = String.format("value%04d", i).getBytes(StandardCharsets.UTF_8);
+            }
+            vbf.put((short)1, vals);
+            // check holding values
+            for (int i = 0; i < Q; i++) {
+                boolean has = vbf.check(vals[i]);
+                assertTrue(has, String.format("value not held: n=%d p=%g i=%d", n, p, i));
+            }
+        } finally {
+            vbf.drop();
         }
     }
 }

@@ -155,6 +155,25 @@ try (Jedis jedis = pool.getResource()) {
 }
 ```
 
+#### multiple `put` and `check`
+
+`put()` and `check()` methods accept multiple values.
+
+Example code:
+
+```java
+// Put three keys at once: "foo", "bar", and "baz"
+f.put((short)1, "foo", "bar", "baz");
+
+// Check multiple value at once.
+
+// This should return : new boolean[]{ true, true, true }
+f.check("foo", "bar", "baz");
+
+// This should return : new boolean[]{ true, false, true, false }
+f.check("foo", "non", "bar", "qux");
+```
+
 ### with VBF(1) Redis
 
 Example code to using VBF with Redis backend.

@@ -218,4 +218,30 @@ class RedisVBF3Test {
             vbf.drop();
         }
     }
+
+    @Test
+    void checkMultiple() throws Exception {
+        try (Jedis jedis = getJedis()) {
+            var vbf = RedisVBF3.open(jedis, "checkMultiple", 1000L, (short)7, (short)1);
+            try {
+                vbf.put((short)1, "foo", "bar", "baz");
+
+                assertArrayEquals(new boolean[]{ true, true, true }, vbf.check("foo", "bar", "baz"));
+                assertArrayEquals(new boolean[]{ true, true }, vbf.check("foo", "bar"));
+                assertArrayEquals(new boolean[]{ true, true }, vbf.check("bar", "baz"));
+                assertArrayEquals(new boolean[]{ true, true }, vbf.check("baz", "foo"));
+
+                assertArrayEquals(new boolean[]{ false, false, false }, vbf.check("qux", "xyz", "non"));
+                assertArrayEquals(new boolean[]{ false, false }, vbf.check("qux", "xyz"));
+                assertArrayEquals(new boolean[]{ false, false }, vbf.check("xyz", "non"));
+                assertArrayEquals(new boolean[]{ false, false }, vbf.check("non", "qux"));
+
+                assertArrayEquals(new boolean[]{ true, false, false }, vbf.check("foo", "xyz", "non"));
+                assertArrayEquals(new boolean[]{ false, true, false }, vbf.check("qux", "bar", "non"));
+                assertArrayEquals(new boolean[]{ false, false, true }, vbf.check("qux", "xyz", "baz"));
+            } finally {
+                vbf.drop();
+            }
+        }
+    }
 }

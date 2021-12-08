@@ -3,6 +3,7 @@ package net.kaoriya.vbf3;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -41,6 +42,9 @@ public final class RedisVBF3 {
         Pos(long x) {
             page = (int)(x / PAGE_SIZE);
             index = (x % PAGE_SIZE) * 8;
+        }
+        long value() {
+            return (long)page * PAGE_SIZE + index;
         }
     }
 
@@ -119,6 +123,35 @@ public final class RedisVBF3 {
             }
             pp.sort(new PosComparator());
             return pp.toArray(new Pos[0]);
+        }
+
+        Pos[] rawHash(byte[] ...dd) {
+            var pp = new ArrayList<Pos>(k * dd.length);
+            for (byte[] d : dd) {
+                for (int i = 0; i < k; i++) {
+                    long x = MetroHash.hash64((long)i, d).get() % m;
+                    if (x < 0) {
+                        x = -x;
+                    }
+                    pp.add(new Pos(x));
+                }
+            }
+            return pp.toArray(new Pos[0]);
+        }
+
+        Pos[] shrink(Pos[] src) {
+            var dst = new ArrayList<Pos>(src.length);
+            var seen = new HashSet<Long>(src.length);
+            for (Pos p : src) {
+                long x = p.value();
+                if (seen.contains(x)) {
+                    continue;
+                }
+                seen.add(x);
+                dst.add(p);
+            }
+            dst.sort(new PosComparator());
+            return dst.toArray(new Pos[0]);
         }
     }
 
@@ -379,6 +412,65 @@ public final class RedisVBF3 {
         set(invalidPages, invalids, "0");
 
         return false;
+    }
+
+    public boolean[] check(String ...ss) throws VBF3Exception {
+        var dd = new byte[ss.length][];
+        for (int i = 0; i < dd.length; i++) {
+            dd[i] = ss[i].getBytes(StandardCharsets.UTF_8);
+        }
+        return check(dd);
+    }
+
+    public boolean[] check(byte[] ...dd) throws VBF3Exception {
+        if (dd.length == 0) {
+            return null;
+        }
+        Gen gen = Gen.get(jedis, key);
+        Pos[] rawpp = props.rawHash(dd);
+        Pos[] pp = props.shrink(rawpp);
+        List<List<Long>> rr = get(pp);
+
+        // detect invalids.
+        var results = new HashMap<Long, Boolean>();
+        int index = 0;
+        int[] invalidPages = new int[pageNum];
+        ArrayList<Pos> invalids = new ArrayList<>(pp.length);
+        for (List<Long> r : rr) {
+            if (r == null || r.size() == 0) {
+                continue;
+            }
+            for (Long vlong : r) {
+                short v = vlong.shortValue();
+                boolean ok = gen.isValid(v);
+                results.put(pp[index].value(), ok);
+                if (!ok && v != 0) {
+                    invalidPages[pp[index].page]++;
+                    invalids.add(pp[index]);
+                }
+                index++;
+            }
+        }
+
+        // clear invalids
+        if (invalids.size() > 0) {
+            set(invalidPages, invalids, "0");
+        }
+
+        // compose return value.
+        var rv = new boolean[dd.length];
+        for (int i = 0; i < rv.length; i++) {
+            boolean v = true;
+            int start = i * (int)props.k, end = (i + 1) * (int)props.k;
+            for (int j = start; j < end; j++) {
+                if (!results.get(rawpp[j].value())) {
+                    v = false;
+                    break;
+                }
+            }
+            rv[i] = v;
+        }
+        return rv;
     }
 
     static final int RETRY_MAX = 5;

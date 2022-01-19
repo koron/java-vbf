@@ -10,6 +10,7 @@ plugins {
     // Apply the java-library plugin for API and implementation separation.
     id 'java-library'
     id 'maven-publish'
+    id 'application'
 }
 
 group = 'net.kaoriya'
@@ -39,11 +40,22 @@ dependencies {
     implementation 'javax.json.bind:javax.json.bind-api:1.0'
     implementation 'org.glassfish:javax.json:1.1.4'
     implementation 'org.eclipse:yasson:1.0.9'
+
+    implementation 'org.redisson:redisson:3.16.7'
+    implementation 'io.lettuce:lettuce-core:6.1.6.RELEASE'
 }
 
 tasks.named('test') {
     // Use junit platform for unit tests.
     useJUnitPlatform()
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+
+application {
+    mainClass.set('net.kaoriya.vbf3exp.Exp1')
 }
 
 publishing {

@@ -17,15 +17,13 @@ public class Exp1 {
         var client = Redisson.create(config);
         try {
             System.out.println("delete old keys");
-            /*
             var keys = client.getKeys();
             for (int i = 0; i < 32; i++) {
                 var k = "foo" + Integer.toString(i);
                 keys.delete(k);
             }
-            */
 
-            for (int i = 32; i < 64; i++) {
+            for (int i = 0; i < 64; i++) {
                 System.out.println(String.format("write #%d hank", i));
                 var k = "foo" + Integer.toString(i);
                 var s = client.getBinaryStream(k);

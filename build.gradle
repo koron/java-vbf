@@ -55,7 +55,7 @@ tasks.withType(JavaCompile) {
 }
 
 application {
-    mainClass.set('net.kaoriya.vbf3exp.Exp1')
+    mainClass.set('net.kaoriya.vbf3exp.Exp2')
 }
 
 publishing {

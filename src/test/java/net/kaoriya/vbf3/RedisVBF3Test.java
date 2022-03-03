@@ -155,8 +155,8 @@ class RedisVBF3Test {
 
     void assertTopBottom(RedisVBF3 rf, short bottom, short top) throws Exception {
         var gen = RedisVBF3.Gen.get(rf.jedis, rf.key);
-        assertEquals(bottom, gen.bottom);
-        assertEquals(top, gen.top);
+        assertEquals(bottom, gen.bottom, "bottom mismatch");
+        assertEquals(top, gen.top, "top mismatch");
     }
 
     @Test
@@ -171,11 +171,60 @@ class RedisVBF3Test {
                     rf.advanceGeneration((short)1);
                     short want = (short)i;
                     assertTopBottom(rf, want, want);
+                    assertFalse(rf.check("dummy"), String.format("any keys should not exist #%d", i));
                 }
             } finally {
                 rf.drop();
             }
         }
+    }
+
+    @Test
+    void advanceGeneration2() throws Exception {
+        final String key = "net.kaoriya.vbf3.RedisVBF3Test.advanceGeneration2";
+        try (Jedis jedis = getJedis()) {
+            RedisVBF3.drop(jedis, key);
+            RedisVBF3 rf = RedisVBF3.open(jedis, key, 256, (short)1, (short)2);
+            try {
+                assertTopBottom(rf, (short)1, (short)2);
+                for (int i = 2; i <= 255; i++) {
+                    rf.advanceGeneration((short)1);
+                    short want = (short)i;
+                    assertTopBottom(rf, want, m255p1add(want, (short)(2-1)));
+                    assertFalse(rf.check("dummy"), String.format("any keys should not exist #%d", i));
+                }
+            } finally {
+                rf.drop();
+            }
+        }
+    }
+
+    @Test
+    void advanceGeneration52() throws Exception {
+        final String key = "net.kaoriya.vbf3.RedisVBF3Test.advanceGeneration52";
+        try (Jedis jedis = getJedis()) {
+            RedisVBF3.drop(jedis, key);
+            RedisVBF3 rf = RedisVBF3.open(jedis, key, 256, (short)1, (short)52);
+            try {
+                assertTopBottom(rf, (short)1, (short)52);
+                for (int i = 2; i <= 255; i++) {
+                    rf.advanceGeneration((short)1);
+                    short want = (short)i;
+                    assertTopBottom(rf, want, m255p1add(want, (short)(52-1)));
+                    assertFalse(rf.check("dummy"), String.format("any keys should not exist #%d", i));
+                }
+            } finally {
+                rf.drop();
+            }
+        }
+    }
+
+    static short m255p1add(short base, short delta) {
+        int v = base + delta;
+        while (v > 255) {
+            v -= 255;
+        }
+        return (short)v;
     }
 
     @Test

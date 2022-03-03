@@ -191,6 +191,9 @@ public final class RedisVBF3 {
         }
 
         boolean isValid(short n) {
+            if (n == 0) {
+                return false;
+            }
             boolean a = bottom <= n;
             boolean b = top >= n;
             if (bottom <= top) {

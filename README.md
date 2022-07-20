@@ -229,6 +229,17 @@ $ ./gradlew test
 $ ./gradlew test --tests '*.vbf3.*'
 ```
 
+## Test with [dragonfly](https://github.com/dragonflydb/dragonfly) on docker
+
+```console
+$ docker run --rm --name vbf-dragonfly -p 6379:6379 --ulimit memlock=-1 -d docker.dragonflydb.io/dragonflydb/dragonfly
+
+$ docker stop vbf-dragonfly
+```
+
+Dragonfly don't support `BEGFIELD` and related commands.
+VBF3 can't run against Dragonfly yet.
+
 ## How to release
 
 1. update `version` in build.gradle
